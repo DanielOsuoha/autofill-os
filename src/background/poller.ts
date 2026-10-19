@@ -1,9 +1,11 @@
 import { gmail } from './auth';
 import { getAccounts } from './storage';
-import { extractCode, type GmailMessage } from './parser';
+import type { GmailMessage } from './parser';
+import { searchMailbox } from './search';
 import type { Candidate, PollUpdate } from '../shared/types';
 interface Session {
   requestId: string; tabId: number; frameId: number; domain: string; title: string;
+  since: number; cache: Map<string, GmailMessage>; warnings: Set<string>;
   controller: AbortController; candidate?: Candidate; expiresAt: number;
 }
 const sessions = new Map<number, Session>();
@@ -36,30 +38,11 @@ export function stopPoll(tabId: number, requestId?: string) {
 }
 export function startPoll(tabId: number, frameId: number, requestId: string, domain: string, title: string) {
   stopPoll(tabId);
-  const session: Session = { tabId, frameId, requestId, domain, title, controller: new AbortController(), expiresAt: Date.now() + 30_000 };
+  const session: Session = { tabId, frameId, requestId, domain, title, since: Date.now() - 120_000, cache: new Map(), warnings: new Set(), controller: new AbortController(), expiresAt: Date.now() + 30_000 };
   sessions.set(tabId, session);
   void run(session).catch(error => {
     if (!session.controller.signal.aborted) void emit(session, { status: 'error', message: error instanceof Error ? error.message : 'Polling failed.' });
   }).finally(() => { if (!session.candidate && sessions.get(tabId) === session) stopPoll(tabId); });
-}
-async function scan(email: string, s: Session): Promise<Candidate[]> {
-  const signal = s.controller.signal;
-  const list = await gmail<{ messages?: { id: string }[] }>(email,
-    `messages?${new URLSearchParams({ q: 'is:unread newer_than:2m', maxResults: '20' })}`, { signal });
-  const results: Candidate[] = [];
-  // Small batches bound concurrent Gmail requests while retaining per-account parallelism.
-  const messages = list.messages || [];
-  for (let i = 0; i < messages.length && !signal.aborted; i += 4) {
-    const batch = await Promise.all(messages.slice(i, i + 4).map(async ({ id }) => {
-      const message = await gmail<GmailMessage>(email, `messages/${encodeURIComponent(id)}?format=full`, { signal });
-      const receivedAt = Number(message.internalDate);
-      if (!Number.isFinite(receivedAt) || receivedAt < Date.now() - 120_000 || receivedAt > Date.now() + 5000) return null;
-      const parsed = extractCode(message, s.domain, s.title);
-      return parsed ? { ...parsed, email, messageId: id, receivedAt } : null;
-    }));
-    results.push(...batch.filter((c): c is Candidate => c !== null));
-  }
-  return results;
 }
 async function run(s: Session) {
   const signal = s.controller.signal;
@@ -82,7 +65,7 @@ async function run(s: Session) {
       const eligible = accounts.filter(a => !a.needsReauth);
       if (!eligible.length) { await emit(s, { status: 'error', message: 'Reconnect your Gmail accounts in the popup.' }); return; }
       await emit(s, { status: 'polling', message: `Checking ${eligible.length} Gmail account${eligible.length > 1 ? 's' : ''}…` });
-      const scans = await Promise.allSettled(eligible.map(a => scan(a.email, s)));
+      const scans = await Promise.allSettled(eligible.map(a => searchMailbox(a.email, { ...s, signal, warn: message => s.warnings.add(message) })));
       if (signal.aborted) break;
       const candidates = scans.flatMap(r => r.status === 'fulfilled' ? r.value : []);
       const failure = scans.find(r => r.status === 'rejected');
@@ -98,7 +81,7 @@ async function run(s: Session) {
         return;
       }
     }
-    if (sessions.get(s.tabId) === s) await emit(s, { status: 'timeout', message: lastError || 'No fresh code found within 30 seconds. Try again.' });
+    if (sessions.get(s.tabId) === s) await emit(s, { status: 'timeout', message: lastError || [...s.warnings].join(' ') || 'No fresh code found within 30 seconds. Try again.' });
   } finally { clearTimeout(deadline); }
 }
 export async function markRead(tabId: number, frameId: number, domain: string, requestId: string, email: string, messageId: string) {
