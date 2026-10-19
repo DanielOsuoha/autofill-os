@@ -1,3 +1,4 @@
+import type { SearchMinutes } from './config';
 export interface Account {
   email: string; accessToken: string; refreshToken: string; expiresAt: number; needsReauth?: boolean;
 }
@@ -9,7 +10,7 @@ export type Request =
   | { type: 'GET_ACCOUNTS' }
   | { type: 'CONNECT_ACCOUNT'; email?: string }
   | { type: 'DISCONNECT_ACCOUNT'; email: string }
-  | { type: 'START_OTP_POLL'; requestId: string; domain: string; title: string }
+  | { type: 'START_OTP_POLL'; requestId: string; domain: string; title: string; minutes?: SearchMinutes }
   | { type: 'STOP_OTP_POLL'; requestId: string }
   | { type: 'MARK_EMAIL_READ'; requestId: string; email: string; messageId: string };
 export type Reply<T = unknown> = { ok: true; data: T } | { ok: false; error: string };

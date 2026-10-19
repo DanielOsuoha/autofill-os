@@ -1,3 +1,4 @@
+import { searchMinutes, POLL_TIMEOUT_MS, type SearchMinutes } from '../shared/config';
 import { gmail } from './auth';
 import { getAccounts } from './storage';
 import type { GmailMessage } from './parser';
@@ -36,9 +37,9 @@ export function stopPoll(tabId: number, requestId?: string) {
     session.controller.abort(); sessions.delete(tabId);
   }
 }
-export function startPoll(tabId: number, frameId: number, requestId: string, domain: string, title: string) {
+export function startPoll(tabId: number, frameId: number, requestId: string, domain: string, title: string, minutes: SearchMinutes = 2) {
   stopPoll(tabId);
-  const session: Session = { tabId, frameId, requestId, domain, title, since: Date.now() - 120_000, cache: new Map(), warnings: new Set(), controller: new AbortController(), expiresAt: Date.now() + 30_000 };
+  const session: Session = { tabId, frameId, requestId, domain, title, since: Date.now() - searchMinutes(minutes) * 60_000, cache: new Map(), warnings: new Set(), controller: new AbortController(), expiresAt: Date.now() + POLL_TIMEOUT_MS };
   sessions.set(tabId, session);
   void run(session).catch(error => {
     if (!session.controller.signal.aborted) void emit(session, { status: 'error', message: error instanceof Error ? error.message : 'Polling failed.' });
@@ -47,7 +48,7 @@ export function startPoll(tabId: number, frameId: number, requestId: string, dom
 async function run(s: Session) {
   const signal = s.controller.signal;
   // A strict wall-clock deadline also aborts in-flight Gmail fetches.
-  const deadline = setTimeout(() => s.controller.abort(), 30_000);
+  const deadline = setTimeout(() => s.controller.abort(), POLL_TIMEOUT_MS);
   let lastError = '';
   try {
     await emit(s, { status: 'polling', message: 'Looking for a fresh verification code…' });

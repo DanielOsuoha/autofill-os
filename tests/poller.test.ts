@@ -81,3 +81,11 @@ describe('adaptive polling', () => {
     expect(messages.filter(m => m.requestId === 'old')).toHaveLength(1);
   });
 });
+it('only widens the time window when explicitly requested', async () => {
+  const now = Date.now();
+  const { startPoll } = await import('../src/background/poller');
+  startPoll(1, 0, 'wide', 'example.com', '', 5);
+  await vi.advanceTimersByTimeAsync(2000);
+  const path = mocks.gmail.mock.calls[0][1];
+  expect(new URLSearchParams(path.split('?')[1]).get('q')).toBe(`is:unread after:${Math.floor((now - 300000) / 1000)}`);
+});

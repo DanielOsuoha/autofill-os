@@ -1,9 +1,11 @@
+import type { SearchMinutes } from '../shared/config';
 import { useEffect, useState } from 'react';
 import type { PollUpdate } from '../shared/types';
 import { request } from '../shared/types';
 import type { Target } from './detector';
 import { insertCode } from './inject';
 export function Widget({ target, onClose }: { target: Target; onClose: () => void }) {
+  const [minutes, setMinutes] = useState<SearchMinutes>(2);
   const [attempt, setAttempt] = useState(0);
   const [update, setUpdate] = useState<PollUpdate>();
   const [requestId, setRequestId] = useState('');
@@ -29,7 +31,7 @@ export function Widget({ target, onClose }: { target: Target; onClose: () => voi
       setUpdate({ type: 'OTP_STATUS', requestId: id, status: 'error', message: 'Extension connection unavailable.' });
       return;
     }
-    void request({ type: 'START_OTP_POLL', requestId: id, domain: location.hostname, title: document.title })
+    void request({ type: 'START_OTP_POLL', requestId: id, domain: location.hostname, title: document.title, minutes })
       .catch(e => { if (live) setError(e.message); });
     // Covers a worker restart, tab switch, or a disconnected message channel.
     const watchdog = setTimeout(() => { if (live) setUpdate(current => current?.status === 'found' ? current : { type: 'OTP_STATUS', requestId: id, status: 'timeout', message: 'Search ended. Try again.' }); }, 32_000);
@@ -39,7 +41,7 @@ export function Widget({ target, onClose }: { target: Target; onClose: () => voi
       try { runtime.onMessage.removeListener(listener); } catch { /* Page refresh restores the context. */ }
       void request({ type: 'STOP_OTP_POLL', requestId: id }).catch(() => {});
     };
-  }, [attempt]);
+  }, [attempt, minutes]);
   async function paste() {
     if (!update?.candidate) return;
     setBusy(true); setError('');
@@ -62,6 +64,7 @@ export function Widget({ target, onClose }: { target: Target; onClose: () => voi
     {pasted && <p className="mt-2 text-xs text-slate-600">Code inserted. Your email will be marked as read.</p>}
     {error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}
     {(error || update?.status === 'timeout' || update?.status === 'error') && <button onClick={() => setAttempt(a => a + 1)} className="mt-3 font-semibold text-indigo-700">Search again</button>}
-    <p className="mt-3 text-xs text-slate-400">Gmail codes from the last 2 minutes</p>
+    {(update?.status === 'timeout' || update?.status === 'error') && minutes === 2 && <button onClick={() => setMinutes(5)} className="mt-3 block text-indigo-700">Search the last 5 minutes</button>}
+    <p className="mt-3 text-xs text-slate-400">Unread Gmail codes from the last {minutes} minutes</p>
   </section>;
 }
