@@ -15,7 +15,14 @@ export async function searchMailbox(email: string, context: SearchContext): Prom
   for (let page = 0; page < MAX_MESSAGE_PAGES; page++) {
     signal.throwIfAborted();
     const query = new URLSearchParams({ q: recentQuery(since), maxResults: String(MESSAGES_PER_PAGE), ...(pageToken ? { pageToken } : {}) });
-    const list = await gmail<{ messages?: { id: string }[]; nextPageToken?: string }>(email, `messages?${query}`, { signal });
+    let list: { messages?: { id: string }[]; nextPageToken?: string };
+    try { list = await gmail(email, `messages?${query}`, { signal }); }
+    catch (error) {
+      signal.throwIfAborted();
+      if (!candidates.length) throw error;
+      warn(`${email}: Some mail could not be checked. ${error instanceof Error ? error.message : 'Search again shortly.'}`);
+      return candidates;
+    }
     const ids = (list.messages || []).map(m => m.id).filter(id => !seen.has(id));
     ids.forEach(id => seen.add(id));
     for (let offset = 0; offset < ids.length; offset += 4) {

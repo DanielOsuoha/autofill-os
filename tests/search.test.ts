@@ -34,3 +34,13 @@ it('caps pagination and reports incomplete search', async () => {
   expect(gmail).toHaveBeenCalledTimes(4);
   expect(ctx.warn).toHaveBeenCalledWith(expect.stringContaining('message limit'));
 });
+it('preserves an earlier page match if a later page is throttled', async () => {
+  gmail.mockImplementation(async (_email, path) => {
+    if (path.includes('pageToken=next')) throw new Error('Gmail rate limit');
+    if (path.startsWith('messages?')) return { messages: [{ id: 'good' }], nextPageToken: 'next' };
+    return { internalDate: String(Date.now()), snippet: 'Verification code: 123456' };
+  });
+  const ctx = context();
+  expect(await searchMailbox('a@example.com', ctx)).toMatchObject([{ messageId: 'good' }]);
+  expect(ctx.warn).toHaveBeenCalledWith(expect.stringContaining('rate limit'));
+});

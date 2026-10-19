@@ -16,13 +16,14 @@ interface Receipt { tabId: number; frameId: number; domain: string; requestId: s
 const receiptKey = (id: string) => `otp-receipt:${id}`;
 async function saveReceipt(s: Session) {
   const stored = await chrome.storage.session.get(null);
-  const expired = Object.entries(stored).filter(([key, value]) => key.startsWith('otp-receipt:') && value.expiresAt < Date.now()).map(([key]) => key);
+  const expired = Object.entries(stored).filter(([key, value]) => (key.startsWith('otp-receipt:') || key.startsWith('otp-poll:')) && value.expiresAt < Date.now()).map(([key]) => key);
   if (expired.length) await chrome.storage.session.remove(expired);
   const receipt: Receipt = { tabId: s.tabId, frameId: s.frameId, domain: s.domain, requestId: s.requestId, candidate: s.candidate!, candidates: s.candidates!, expiresAt: s.expiresAt };
   await chrome.storage.session.set({ [receiptKey(s.requestId)]: receipt });
 }
 export const POLL_DELAYS = [2000, 2000, 3000, 5000, 8000, 12000];
 const emit = (s: Session, update: Omit<PollUpdate, 'type' | 'requestId'>) => {
+  if (sessions.get(s.tabId) !== s) return Promise.resolve();
   s.lastUpdate = { type: 'OTP_STATUS', requestId: s.requestId, ...update };
   return chrome.tabs.sendMessage(s.tabId, s.lastUpdate, { frameId: s.frameId }).catch(() => { stopPoll(s.tabId, s.requestId); });
 };
@@ -50,10 +51,11 @@ export function startPoll(tabId: number, frameId: number, requestId: string, dom
   const saved: Checkpoint = { tabId, frameId, requestId, domain, title, since: session.since, expiresAt: session.expiresAt };
   void chrome.storage.session.set({ [checkpointKey(requestId)]: saved }).then(() => run(session)).catch(error => {
     if (!session.controller.signal.aborted) void emit(session, { status: 'error', message: error instanceof Error ? error.message : 'Polling failed.' });
-  }).finally(() => { if (!session.candidate && sessions.get(tabId) === session) stopPoll(tabId); });
+  }).finally(() => { if (session.lastUpdate?.status !== 'found' && sessions.get(tabId) === session) stopPoll(tabId); });
 }
 async function run(s: Session) {
   const signal = s.controller.signal;
+  if (signal.aborted || sessions.get(s.tabId) !== s) return;
   // A strict wall-clock deadline also aborts in-flight Gmail fetches.
   const deadline = setTimeout(() => s.controller.abort(), Math.max(0, s.expiresAt - Date.now()));
   let lastError = '';
@@ -109,7 +111,13 @@ export async function markRead(tabId: number, frameId: number, domain: string, r
 
 export async function pollState(tabId: number, frameId: number, domain: string, requestId: string): Promise<PollUpdate | null> {
   const current = sessions.get(tabId);
-  if (current?.requestId === requestId && current.frameId === frameId && current.domain === domain) return current.lastUpdate || null;
+  if (current?.requestId === requestId && current.frameId === frameId && current.domain === domain) {
+    if (current.expiresAt <= Date.now()) {
+      stopPoll(tabId, requestId);
+      return { type: 'OTP_STATUS', requestId, status: 'timeout', message: 'This search result expired. Search again.' };
+    }
+    return current.lastUpdate || null;
+  }
   const stored = await chrome.storage.session.get([receiptKey(requestId), checkpointKey(requestId)]);
   const receipt = stored[receiptKey(requestId)] as Receipt | undefined;
   if (receipt && receipt.tabId === tabId && receipt.frameId === frameId && receipt.domain === domain && receipt.expiresAt > Date.now()) {

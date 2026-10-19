@@ -78,7 +78,7 @@ describe('adaptive polling', () => {
     startPoll(1, 0, 'new', 'example.com', '');
     await vi.advanceTimersByTimeAsync(2000);
     expect(mocks.gmail).toHaveBeenCalledTimes(2);
-    expect(messages.filter(m => m.requestId === 'old')).toHaveLength(1);
+    expect(messages.filter(m => m.requestId === 'old')).toHaveLength(0);
   });
 });
 it('only widens the time window when explicitly requested', async () => {
