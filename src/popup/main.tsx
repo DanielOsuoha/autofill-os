@@ -38,7 +38,7 @@ function App() {
     catch (e) { setError(e instanceof Error ? e.message : 'Could not activate the field picker.'); }
   }
   return <main className="w-[380px] bg-slate-50 p-6 font-sans text-slate-900">
-    <div className="mb-6 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-indigo-600 text-xl font-bold text-white">A</span><div><h1 className="text-xl font-bold">Autofill OS</h1><p className="text-xs text-slate-500">Your code. One click away.</p></div></div>
+    <div className="mb-6 flex items-center gap-3"><img src={chrome.runtime.getURL('icons/icon-128.png')} width={44} height={44} alt="" className="h-11 w-11" /><div><h1 className="text-xl font-bold">Autofill OS</h1><p className="text-xs text-slate-500">Your code. One click away.</p></div></div>
     <div className="mb-3 flex justify-between"><h2 className="font-semibold">Connected Gmail accounts</h2><span className="text-sm text-slate-500">{accounts.length}/{MAX_ACCOUNTS}</span></div>
     <div className="space-y-3">{accounts.map(account => <article key={account.email} className="rounded-xl border border-slate-200 bg-white p-4">
       <p className="truncate text-sm font-semibold" title={account.email}>{account.email}</p>
