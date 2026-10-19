@@ -5,7 +5,7 @@ export interface Account {
 export type AccountSummary = Pick<Account, 'email' | 'expiresAt' | 'needsReauth'>;
 export interface Candidate { code: string; email: string; messageId: string; score: number; receivedAt: number; sender?: string; subject?: string; domainMatch?: boolean }
 export type PollStatus = 'polling' | 'offline' | 'found' | 'timeout' | 'error';
-export interface PollUpdate { type: 'OTP_STATUS'; requestId: string; status: PollStatus; message?: string; candidate?: Candidate }
+export interface PollUpdate { type: 'OTP_STATUS'; requestId: string; status: PollStatus; message?: string; candidate?: Candidate; candidates?: Candidate[]; warning?: string; expiresAt?: number }
 export type Request =
   | { type: 'GET_ACCOUNTS' }
   | { type: 'CONNECT_ACCOUNT'; email?: string }

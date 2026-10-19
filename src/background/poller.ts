@@ -1,4 +1,4 @@
-import { searchMinutes, POLL_TIMEOUT_MS, type SearchMinutes } from '../shared/config';
+import { searchMinutes, POLL_TIMEOUT_MS, MAX_CANDIDATES, type SearchMinutes } from '../shared/config';
 import { gmail } from './auth';
 import { getAccounts } from './storage';
 import type { GmailMessage } from './parser';
@@ -7,16 +7,16 @@ import type { Candidate, PollUpdate } from '../shared/types';
 interface Session {
   requestId: string; tabId: number; frameId: number; domain: string; title: string;
   since: number; cache: Map<string, GmailMessage>; warnings: Set<string>;
-  controller: AbortController; candidate?: Candidate; expiresAt: number;
+  controller: AbortController; candidate?: Candidate; candidates?: Candidate[]; expiresAt: number;
 }
 const sessions = new Map<number, Session>();
-interface Receipt { tabId: number; frameId: number; domain: string; requestId: string; candidate: Candidate; expiresAt: number }
+interface Receipt { tabId: number; frameId: number; domain: string; requestId: string; candidate: Candidate; candidates: Candidate[]; expiresAt: number }
 const receiptKey = (id: string) => `otp-receipt:${id}`;
 async function saveReceipt(s: Session) {
   const stored = await chrome.storage.session.get(null);
   const expired = Object.entries(stored).filter(([key, value]) => key.startsWith('otp-receipt:') && value.expiresAt < Date.now()).map(([key]) => key);
   if (expired.length) await chrome.storage.session.remove(expired);
-  const receipt: Receipt = { tabId: s.tabId, frameId: s.frameId, domain: s.domain, requestId: s.requestId, candidate: s.candidate!, expiresAt: s.expiresAt };
+  const receipt: Receipt = { tabId: s.tabId, frameId: s.frameId, domain: s.domain, requestId: s.requestId, candidate: s.candidate!, candidates: s.candidates!, expiresAt: s.expiresAt };
   await chrome.storage.session.set({ [receiptKey(s.requestId)]: receipt });
 }
 export const POLL_DELAYS = [2000, 2000, 3000, 5000, 8000, 12000];
@@ -63,6 +63,8 @@ async function run(s: Session) {
       if (signal.aborted) break;
       const accounts = await getAccounts();
       if (!accounts.length) { await emit(s, { status: 'error', message: 'Connect a Gmail account in the Autofill OS popup.' }); return; }
+      s.warnings.clear();
+      for (const account of accounts.filter(a => a.needsReauth)) s.warnings.add(`Reconnect ${account.email} in the popup.`);
       const eligible = accounts.filter(a => !a.needsReauth);
       if (!eligible.length) { await emit(s, { status: 'error', message: 'Reconnect your Gmail accounts in the popup.' }); return; }
       await emit(s, { status: 'polling', message: `Checking ${eligible.length} Gmail account${eligible.length > 1 ? 's' : ''}…` });
@@ -70,13 +72,14 @@ async function run(s: Session) {
       if (signal.aborted) break;
       const candidates = scans.flatMap(r => r.status === 'fulfilled' ? r.value : []);
       const failure = scans.find(r => r.status === 'rejected');
-      if (failure?.status === 'rejected') lastError = failure.reason instanceof Error ? failure.reason.message : 'Gmail unavailable.';
-      candidates.sort((a, b) => b.score - a.score || b.receivedAt - a.receivedAt);
+      lastError = failure?.status === 'rejected' ? (failure.reason instanceof Error ? failure.reason.message : 'Gmail unavailable.') : '';
+      if (lastError) s.warnings.add(lastError);
+      candidates.sort((a, b) => (b.score - (Date.now() - b.receivedAt) / 15000) - (a.score - (Date.now() - a.receivedAt) / 15000) || b.receivedAt - a.receivedAt);
       if (candidates[0]) {
-        s.candidate = candidates[0]; s.expiresAt = Date.now() + 120_000;
+        s.candidates = candidates.slice(0, MAX_CANDIDATES); s.candidate = s.candidates[0]; s.expiresAt = Date.now() + 120_000;
         await saveReceipt(s);
         if (signal.aborted) return;
-        await emit(s, { status: 'found', candidate: s.candidate });
+        await emit(s, { status: 'found', candidate: s.candidate, candidates: s.candidates, expiresAt: s.expiresAt, warning: [...s.warnings].join(' ') || undefined });
         // Keep only a short-lived receipt to authorize the subsequent mark-as-read.
         setTimeout(() => { if (sessions.get(s.tabId) === s) stopPoll(s.tabId); }, 120_000);
         return;
@@ -90,7 +93,7 @@ export async function markRead(tabId: number, frameId: number, domain: string, r
   const key = receiptKey(requestId);
   const s = (await chrome.storage.session.get(key))[key] as Receipt | undefined;
   if (!s || s.tabId !== tabId || s.frameId !== frameId || s.domain !== domain || s.requestId !== requestId || s.expiresAt < Date.now() ||
-      s.candidate.email !== email || s.candidate.messageId !== messageId) throw new Error('This code has expired. Search again.');
+      !(s.candidates || [s.candidate]).some(candidate => candidate.email === email && candidate.messageId === messageId)) throw new Error('This code has expired. Search again.');
   await gmail(email, `messages/${encodeURIComponent(messageId)}/modify`, { method: 'POST', body: JSON.stringify({ removeLabelIds: ['UNREAD'] }) });
   await chrome.storage.session.remove(key);
   stopPoll(tabId, requestId);

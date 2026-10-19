@@ -89,3 +89,17 @@ it('only widens the time window when explicitly requested', async () => {
   const path = mocks.gmail.mock.calls[0][1];
   expect(new URLSearchParams(path.split('?')[1]).get('q')).toBe(`is:unread after:${Math.floor((now - 300000) / 1000)}`);
 });
+it('offers multiple matches and authorizes only offered message receipts', async () => {
+  mocks.getAccounts.mockResolvedValue([{ email: 'one@example.com' }]);
+  mocks.gmail.mockImplementation(async (_email, path) => {
+    if (path.startsWith('messages?')) return { messages: [{ id: 'a' }, { id: 'b' }] };
+    return { internalDate: String(Date.now()), snippet: `Verification code: ${path.includes('/a?') ? '123456' : '654321'}` };
+  });
+  const { startPoll, markRead } = await import('../src/background/poller');
+  startPoll(1, 0, 'choice', 'example.com', '');
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(messages.at(-1)?.candidates).toHaveLength(2);
+  await expect(markRead(1, 0, 'example.com', 'choice', 'one@example.com', 'other')).rejects.toThrow('expired');
+  await markRead(1, 0, 'example.com', 'choice', 'one@example.com', 'b');
+  expect(mocks.gmail).toHaveBeenLastCalledWith('one@example.com', 'messages/b/modify', expect.anything());
+});
