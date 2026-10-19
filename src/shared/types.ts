@@ -2,7 +2,7 @@ export interface Account {
   email: string; accessToken: string; refreshToken: string; expiresAt: number; needsReauth?: boolean;
 }
 export type AccountSummary = Pick<Account, 'email' | 'expiresAt' | 'needsReauth'>;
-export interface Candidate { code: string; email: string; messageId: string; score: number; receivedAt: number }
+export interface Candidate { code: string; email: string; messageId: string; score: number; receivedAt: number; sender?: string; subject?: string; domainMatch?: boolean }
 export type PollStatus = 'polling' | 'offline' | 'found' | 'timeout' | 'error';
 export interface PollUpdate { type: 'OTP_STATUS'; requestId: string; status: PollStatus; message?: string; candidate?: Candidate }
 export type Request =

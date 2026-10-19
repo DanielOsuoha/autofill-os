@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tldts": "^7.4.18"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",

@@ -26,3 +26,14 @@ describe('OTP extraction', () => {
     expect(extractCode(msg, 'example.com', '')?.code).toBe('654321');
   });
 });
+it('matches sibling subdomains but not unrelated public or private suffix tenants', async () => {
+  const { matchingDomain } = await import('../src/background/parser');
+  expect(matchingDomain('mail.example.co.uk', 'login.example.co.uk')).toBe(true);
+  expect(matchingDomain('evil.co.uk', 'example.co.uk')).toBe(false);
+  expect(matchingDomain('evil.github.io', 'trusted.github.io')).toBe(false);
+});
+it('favors the explicit OTP over a nearby year and does not trust display names', () => {
+  const result = extractCode(message('Security notice 2026. Your verification code is 001234', 'Example security@example.com <sender@evil.com>'), 'example.com', '');
+  expect(result?.code).toBe('001234');
+  expect(result?.domainMatch).toBe(false);
+});
