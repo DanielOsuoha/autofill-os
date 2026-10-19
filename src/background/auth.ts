@@ -1,3 +1,4 @@
+import { MAX_ACCOUNTS } from '../shared/config';
 import { getAccounts, updateAccounts } from './storage';
 import type { Account } from '../shared/types';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -34,7 +35,7 @@ export async function connectAccount(expectedEmail?: string) {
   try {
     if (!CLIENT_ID || !TOKEN_ENDPOINT) throw new Error('Configure Google OAuth in .env and rebuild the extension.');
     const accounts = await getAccounts();
-    if (accounts.length >= 2 && !accounts.some(a => a.email === expectedEmail)) throw new Error('Disconnect an account first (maximum two).');
+    if (accounts.length >= MAX_ACCOUNTS && !accounts.some(a => a.email === expectedEmail)) throw new Error(`Disconnect an account first (maximum ${MAX_ACCOUNTS}).`);
     const verifier = randomString();
     const state = randomString();
     const redirectUri = chrome.identity.getRedirectURL('oauth2');
@@ -62,7 +63,7 @@ export async function connectAccount(expectedEmail?: string) {
     if (expectedEmail && email !== expectedEmail) throw new Error(`Please reconnect ${expectedEmail} using the same Google account.`);
     await updateAccounts(current => {
       const previous = current.find(a => a.email === email);
-      if (!previous && current.length >= 2) throw new Error('Only two accounts can be connected.');
+      if (!previous && current.length >= MAX_ACCOUNTS) throw new Error(`Only ${MAX_ACCOUNTS} accounts can be connected.`);
       const refreshToken = tokens.refresh_token || previous?.refreshToken;
       if (!refreshToken) throw new Error('No refresh token received. Remove the app from Google account permissions and reconnect.');
       const account: Account = { email, accessToken: tokens.access_token, refreshToken, expiresAt: Date.now() + tokens.expires_in * 1000, needsReauth: false };
