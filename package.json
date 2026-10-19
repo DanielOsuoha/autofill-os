@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "oauth:server": "node --env-file=server/.env server/index.mjs",
     "test:page": "node scripts/test-page.mjs",
-    "test:extension": "npm run build && node scripts/check-content.mjs"
+    "test:extension": "npm run build && node scripts/check-content.mjs",
+    "test:browser": "npm run build && node scripts/check-browser.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -27,6 +28,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "jsdom": "^26.0.0",
+    "playwright": "^1.64.1",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3",
