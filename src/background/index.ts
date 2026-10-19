@@ -1,7 +1,7 @@
 import { searchMinutes } from '../shared/config';
 import { connectAccount } from './auth';
 import { storageReady, summaries, updateAccounts } from './storage';
-import { markRead, startPoll, stopPoll } from './poller';
+import { markRead, pollState, startPoll, stopPoll } from './poller';
 import type { Request } from '../shared/types';
 void storageReady.catch(() => {});
 chrome.runtime.onMessage.addListener((message: Request, sender, sendResponse) => {
@@ -29,6 +29,11 @@ chrome.runtime.onMessage.addListener((message: Request, sender, sendResponse) =>
         if (!tab.active) throw new Error('Focus this tab to look for a code.');
         // Use the browser-authenticated sender URL, not a page-supplied domain.
         startPoll(sender.tab.id, sender.frameId ?? 0, message.requestId, url.hostname, String(message.title || '').slice(0, 200), searchMinutes(message.minutes)); return null;
+      }
+      case 'GET_POLL_STATE': {
+        if (sender.tab?.id === undefined || !sender.url || typeof message.requestId !== 'string') throw new Error('Invalid page request.');
+        if (!(await chrome.tabs.get(sender.tab.id)).active) return null;
+        return pollState(sender.tab.id, sender.frameId ?? 0, new URL(sender.url).hostname, message.requestId);
       }
       case 'STOP_OTP_POLL':
         if (sender.tab?.id !== undefined) stopPoll(sender.tab.id, message.requestId); return null;

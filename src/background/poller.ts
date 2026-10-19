@@ -7,9 +7,11 @@ import type { Candidate, PollUpdate } from '../shared/types';
 interface Session {
   requestId: string; tabId: number; frameId: number; domain: string; title: string;
   since: number; cache: Map<string, GmailMessage>; warnings: Set<string>;
-  controller: AbortController; candidate?: Candidate; candidates?: Candidate[]; expiresAt: number;
+  lastUpdate?: PollUpdate; controller: AbortController; candidate?: Candidate; candidates?: Candidate[]; expiresAt: number;
 }
 const sessions = new Map<number, Session>();
+type Checkpoint = Pick<Session, 'requestId' | 'tabId' | 'frameId' | 'domain' | 'title' | 'since' | 'expiresAt'>;
+const checkpointKey = (id: string) => `otp-poll:${id}`;
 interface Receipt { tabId: number; frameId: number; domain: string; requestId: string; candidate: Candidate; candidates: Candidate[]; expiresAt: number }
 const receiptKey = (id: string) => `otp-receipt:${id}`;
 async function saveReceipt(s: Session) {
@@ -20,8 +22,10 @@ async function saveReceipt(s: Session) {
   await chrome.storage.session.set({ [receiptKey(s.requestId)]: receipt });
 }
 export const POLL_DELAYS = [2000, 2000, 3000, 5000, 8000, 12000];
-const emit = (s: Session, update: Omit<PollUpdate, 'type' | 'requestId'>) =>
-  chrome.tabs.sendMessage(s.tabId, { type: 'OTP_STATUS', requestId: s.requestId, ...update }, { frameId: s.frameId }).catch(() => { stopPoll(s.tabId, s.requestId); });
+const emit = (s: Session, update: Omit<PollUpdate, 'type' | 'requestId'>) => {
+  s.lastUpdate = { type: 'OTP_STATUS', requestId: s.requestId, ...update };
+  return chrome.tabs.sendMessage(s.tabId, s.lastUpdate, { frameId: s.frameId }).catch(() => { stopPoll(s.tabId, s.requestId); });
+};
 function pause(ms: number, signal: AbortSignal, wakeOnline = false) {
   return new Promise<void>(resolve => {
     const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); globalThis.removeEventListener('online', done); resolve(); };
@@ -35,20 +39,23 @@ export function stopPoll(tabId: number, requestId?: string) {
   const session = sessions.get(tabId);
   if (session && (!requestId || session.requestId === requestId)) {
     session.controller.abort(); sessions.delete(tabId);
+    void chrome.storage.session.remove(checkpointKey(session.requestId));
   }
 }
-export function startPoll(tabId: number, frameId: number, requestId: string, domain: string, title: string, minutes: SearchMinutes = 2) {
+export function startPoll(tabId: number, frameId: number, requestId: string, domain: string, title: string, minutes: SearchMinutes = 2, checkpoint?: Checkpoint) {
+  if (sessions.get(tabId)?.requestId === requestId) return;
   stopPoll(tabId);
-  const session: Session = { tabId, frameId, requestId, domain, title, since: Date.now() - searchMinutes(minutes) * 60_000, cache: new Map(), warnings: new Set(), controller: new AbortController(), expiresAt: Date.now() + POLL_TIMEOUT_MS };
+  const session: Session = { tabId, frameId, requestId, domain, title, since: Date.now() - searchMinutes(minutes) * 60_000, cache: new Map(), warnings: new Set(), controller: new AbortController(), expiresAt: Date.now() + POLL_TIMEOUT_MS, ...checkpoint };
   sessions.set(tabId, session);
-  void run(session).catch(error => {
+  const saved: Checkpoint = { tabId, frameId, requestId, domain, title, since: session.since, expiresAt: session.expiresAt };
+  void chrome.storage.session.set({ [checkpointKey(requestId)]: saved }).then(() => run(session)).catch(error => {
     if (!session.controller.signal.aborted) void emit(session, { status: 'error', message: error instanceof Error ? error.message : 'Polling failed.' });
   }).finally(() => { if (!session.candidate && sessions.get(tabId) === session) stopPoll(tabId); });
 }
 async function run(s: Session) {
   const signal = s.controller.signal;
   // A strict wall-clock deadline also aborts in-flight Gmail fetches.
-  const deadline = setTimeout(() => s.controller.abort(), POLL_TIMEOUT_MS);
+  const deadline = setTimeout(() => s.controller.abort(), Math.max(0, s.expiresAt - Date.now()));
   let lastError = '';
   try {
     await emit(s, { status: 'polling', message: 'Looking for a fresh verification code…' });
@@ -78,6 +85,7 @@ async function run(s: Session) {
       if (candidates[0]) {
         s.candidates = candidates.slice(0, MAX_CANDIDATES); s.candidate = s.candidates[0]; s.expiresAt = Date.now() + 120_000;
         await saveReceipt(s);
+        await chrome.storage.session.remove(checkpointKey(s.requestId));
         if (signal.aborted) return;
         await emit(s, { status: 'found', candidate: s.candidate, candidates: s.candidates, expiresAt: s.expiresAt, warning: [...s.warnings].join(' ') || undefined });
         // Keep only a short-lived receipt to authorize the subsequent mark-as-read.
@@ -97,4 +105,21 @@ export async function markRead(tabId: number, frameId: number, domain: string, r
   await gmail(email, `messages/${encodeURIComponent(messageId)}/modify`, { method: 'POST', body: JSON.stringify({ removeLabelIds: ['UNREAD'] }) });
   await chrome.storage.session.remove(key);
   stopPoll(tabId, requestId);
+}
+
+export async function pollState(tabId: number, frameId: number, domain: string, requestId: string): Promise<PollUpdate | null> {
+  const current = sessions.get(tabId);
+  if (current?.requestId === requestId && current.frameId === frameId && current.domain === domain) return current.lastUpdate || null;
+  const stored = await chrome.storage.session.get([receiptKey(requestId), checkpointKey(requestId)]);
+  const receipt = stored[receiptKey(requestId)] as Receipt | undefined;
+  if (receipt && receipt.tabId === tabId && receipt.frameId === frameId && receipt.domain === domain && receipt.expiresAt > Date.now()) {
+    return { type: 'OTP_STATUS', requestId, status: 'found', candidate: receipt.candidate, candidates: receipt.candidates, expiresAt: receipt.expiresAt };
+  }
+  const checkpoint = stored[checkpointKey(requestId)] as Checkpoint | undefined;
+  if (checkpoint && checkpoint.tabId === tabId && checkpoint.frameId === frameId && checkpoint.domain === domain && checkpoint.expiresAt > Date.now()) {
+    if (current) return null; // Never replace a newer field's session.
+    startPoll(tabId, frameId, requestId, domain, checkpoint.title, 2, checkpoint);
+    return { type: 'OTP_STATUS', requestId, status: 'polling', message: 'Resuming interrupted Gmail search…' };
+  }
+  return null;
 }

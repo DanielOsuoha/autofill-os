@@ -34,9 +34,17 @@ export function Widget({ target, onClose }: { target: Target; onClose: () => voi
     void request({ type: 'START_OTP_POLL', requestId: id, domain: location.hostname, title: document.title, minutes })
       .catch(e => { if (live) setError(e.message); });
     // Covers a worker restart, tab switch, or a disconnected message channel.
-    const watchdog = setTimeout(() => { if (live) setUpdate(current => current?.status === 'found' ? current : { type: 'OTP_STATUS', requestId: id, status: 'timeout', message: 'Search ended. Try again.' }); }, 32_000);
+    let checking = false;
+    const heartbeat = setInterval(() => {
+      if (checking || !live || document.hidden) return;
+      checking = true;
+      void request<PollUpdate | null>({ type: 'GET_POLL_STATE', requestId: id }).then(state => {
+        if (live && state) setUpdate(state);
+      }).catch(e => { if (live) setError(e.message); }).finally(() => { checking = false; });
+    }, 5000);
+    const watchdog = setTimeout(() => { if (live) setUpdate(current => current?.status === 'found' || current?.status === 'error' || current?.status === 'timeout' ? current : { type: 'OTP_STATUS', requestId: id, status: 'timeout', message: 'Search ended. Try again.' }); }, 32_000);
     return () => {
-      live = false; clearTimeout(watchdog);
+      live = false; clearTimeout(watchdog); clearInterval(heartbeat);
       // Chrome can invalidate the context while the helper is still mounted.
       try { runtime.onMessage.removeListener(listener); } catch { /* Page refresh restores the context. */ }
       void request({ type: 'STOP_OTP_POLL', requestId: id }).catch(() => {});

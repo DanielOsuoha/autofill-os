@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.stubGlobal('chrome', {
     tabs: { sendMessage: vi.fn(async (_tab, message) => { messages.push(message); }) },
     storage: { session: {
-      get: vi.fn(async (key: string | null) => key ? { [key]: session[key] } : session),
+      get: vi.fn(async (key: string | string[] | null) => Array.isArray(key) ? Object.fromEntries(key.map(k => [k, session[k]])) : key ? { [key]: session[key] } : session),
       set: vi.fn(async (values) => { Object.assign(session, values); }),
       remove: vi.fn(async (keys) => { for (const key of Array.isArray(keys) ? keys : [keys]) delete session[key]; }),
     } },
@@ -102,4 +102,21 @@ it('offers multiple matches and authorizes only offered message receipts', async
   await expect(markRead(1, 0, 'example.com', 'choice', 'one@example.com', 'other')).rejects.toThrow('expired');
   await markRead(1, 0, 'example.com', 'choice', 'one@example.com', 'b');
   expect(mocks.gmail).toHaveBeenLastCalledWith('one@example.com', 'messages/b/modify', expect.anything());
+});
+it('does not restart an already-running request', async () => {
+  const { startPoll } = await import('../src/background/poller');
+  startPoll(1, 0, 'same', 'example.com', '');
+  await vi.advanceTimersByTimeAsync(1000);
+  startPoll(1, 0, 'same', 'example.com', '');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(mocks.gmail).toHaveBeenCalledTimes(2);
+});
+it('resumes a worker checkpoint within its original deadline', async () => {
+  const deadline = Date.now() + 3000;
+  session['otp-poll:resume'] = { tabId: 1, frameId: 0, domain: 'example.com', requestId: 'resume', title: '', since: Date.now() - 120000, expiresAt: deadline };
+  const { pollState } = await import('../src/background/poller');
+  expect(await pollState(2, 0, 'example.com', 'resume')).toBeNull();
+  expect(await pollState(1, 0, 'example.com', 'resume')).toMatchObject({ status: 'polling' });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(messages.at(-1)?.status).toBe('timeout');
 });

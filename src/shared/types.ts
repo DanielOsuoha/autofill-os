@@ -13,6 +13,7 @@ export type Request =
   | { type: 'DISCONNECT_ACCOUNT'; email: string }
   | { type: 'START_OTP_POLL'; requestId: string; domain: string; title: string; minutes?: SearchMinutes }
   | { type: 'STOP_OTP_POLL'; requestId: string }
+  | { type: 'GET_POLL_STATE'; requestId: string }
   | { type: 'MARK_EMAIL_READ'; requestId: string; email: string; messageId: string };
 export type Reply<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 export async function request<T>(message: Request): Promise<T> {
