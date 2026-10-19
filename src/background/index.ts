@@ -8,8 +8,15 @@ chrome.runtime.onMessage.addListener((message: Request, sender, sendResponse) =>
   const handle = async () => {
     if (sender.id !== chrome.runtime.id || !message || typeof message.type !== 'string') throw new Error('Invalid request.');
     const popup = !sender.tab && sender.url === chrome.runtime.getURL('src/popup/index.html');
-    if (['GET_ACCOUNTS', 'CONNECT_ACCOUNT', 'DISCONNECT_ACCOUNT'].includes(message.type) && !popup) throw new Error('Open the extension popup to manage accounts.');
+    if (['GET_ACCOUNTS', 'CONNECT_ACCOUNT', 'DISCONNECT_ACCOUNT', 'CHOOSE_CODE_FIELD'].includes(message.type) && !popup) throw new Error('Open the extension popup to manage accounts.');
     switch (message.type) {
+      case 'CHOOSE_CODE_FIELD': {
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (tab?.id === undefined) throw new Error('Open the verification website first.');
+        try { await chrome.tabs.sendMessage(tab.id, { type: 'ARM_MANUAL_SELECTION' }, { frameId: 0 }); }
+        catch { throw new Error('Refresh the verification webpage and allow Autofill OS site access, then try again. Chrome internal pages are unsupported.'); }
+        return null;
+      }
       case 'GET_ACCOUNTS': return summaries();
       case 'CONNECT_ACCOUNT': await connectAccount(message.email); return summaries();
       case 'DISCONNECT_ACCOUNT':

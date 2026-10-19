@@ -1,6 +1,7 @@
+import { manualSelection } from './manual';
 import { createRoot, type Root } from 'react-dom/client';
 import { Widget } from './Widget';
-import { observeTargets, type Target } from './detector';
+import { eligible, observeTargets, type Target } from './detector';
 import styles from '../shared/styles.css?inline';
 let host: HTMLDivElement | undefined;
 let root: Root | undefined;
@@ -38,8 +39,24 @@ function show(target: Target) {
   position();
   resizeObserver = new ResizeObserver(position); resizeObserver.observe(host);
 }
-observeTargets(show, () => { if (!inserting) { dismissed = undefined; close(); dismissed = undefined; } });
+observeTargets(show, () => {
+  // A manually selected field may deliberately have no OTP metadata.
+  const focused = document.activeElement;
+  if (current?.inputs.includes(focused as HTMLInputElement) && focused instanceof HTMLInputElement && eligible(focused)) return;
+  if (!inserting) { close(); dismissed = undefined; }
+});
 window.addEventListener('scroll', position, true);
 window.addEventListener('resize', position);
 window.addEventListener('pagehide', () => close());
 document.addEventListener('visibilitychange', () => { if (document.hidden) close(); });
+
+let cancelManual: (() => void) | undefined;
+if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message, sender, respond) => {
+    if (message?.type === 'ARM_MANUAL_SELECTION' && sender?.id === chrome.runtime.id) {
+      cancelManual?.(); close();
+      cancelManual = manualSelection(target => { dismissed = undefined; show(target); });
+      respond({ ok: true });
+    }
+  });
+}
