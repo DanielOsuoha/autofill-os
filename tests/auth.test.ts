@@ -48,3 +48,17 @@ describe('token lifecycle', () => {
     expect(await challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
   });
 });
+it('honors rate-limit cooldowns without repeating Gmail requests', async () => {
+  accounts[0].expiresAt = Date.now() + 3600000;
+  const fetcher = vi.fn().mockResolvedValue(new Response('{}', { status: 429, headers: { 'Retry-After': '60' } }));
+  vi.stubGlobal('fetch', fetcher);
+  const { gmail } = await import('../src/background/auth');
+  await expect(gmail(accounts[0].email, 'messages')).rejects.toThrow('limiting');
+  await expect(gmail(accounts[0].email, 'messages')).rejects.toThrow('limiting');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it('reports an unreachable broker clearly', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+  const { accessToken } = await import('../src/background/auth');
+  await expect(accessToken(accounts[0].email)).rejects.toThrow('Cannot reach the OAuth server');
+});

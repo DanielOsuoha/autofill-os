@@ -1,3 +1,4 @@
+import { ServiceError, abortable, delay, retryAfter } from './network';
 import { MAX_ACCOUNTS } from '../shared/config';
 import { getAccounts, updateAccounts } from './storage';
 import type { Account } from '../shared/types';
@@ -5,7 +6,7 @@ const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const TOKEN_ENDPOINT = import.meta.env.VITE_OAUTH_TOKEN_ENDPOINT;
 const SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 interface Tokens { access_token: string; refresh_token?: string; expires_in: number; scope?: string }
-export class ReauthError extends Error {}
+export class ReauthError extends ServiceError { constructor(message: string) { super('reauth', message); } }
 function randomString() {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -16,14 +17,15 @@ export async function challenge(verifier: string) {
 }
 async function tokenRequest(body: Record<string, string>): Promise<Tokens> {
   if (!CLIENT_ID || !TOKEN_ENDPOINT) throw new Error('Configure Google OAuth in .env and rebuild the extension.');
-  const response = await fetch(TOKEN_ENDPOINT, {
+  let response: Response;
+  try { response = await fetch(TOKEN_ENDPOINT, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body), signal: AbortSignal.timeout(12_000),
-  });
-  const result = await response.json();
+  }); } catch { throw new ServiceError('broker_unavailable', 'Cannot reach the OAuth server. Start npm run oauth:server, or check your hosted server and internet connection.'); }
+  const result = await response.json().catch(() => ({ error: 'invalid_response' }));
   if (!response.ok || result.error) {
     if (result.error === 'invalid_grant') throw new ReauthError('Google authorization expired. Reconnect this account.');
-    throw new Error('Google token exchange failed. Check the OAuth server configuration or try again.');
+    throw new ServiceError('broker_unavailable', 'Google token exchange failed. Check the OAuth server configuration or try again.');
   }
   if (!result.access_token || !Number.isFinite(result.expires_in)) throw new Error('Invalid token response.');
   return result;
@@ -96,16 +98,41 @@ export async function accessToken(email: string, force = false): Promise<string>
   refreshing.set(email, work);
   try { return await work; } finally { refreshing.delete(email); }
 }
+const cooldowns = new Map<string, number>();
 export async function gmail<T>(email: string, path: string, init: RequestInit = {}): Promise<T> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const token = await accessToken(email, attempt === 1);
-    const response = await fetch(`https://www.googleapis.com/gmail/v1/users/me/${path}`, {
-      ...init, headers: { ...init.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      signal: init.signal ?? AbortSignal.timeout(10_000),
-    });
-    if (response.status === 401 && attempt === 0) continue;
-    if (!response.ok) throw new Error(`Gmail request failed (${response.status}).${response.status === 403 ? ' Check Gmail API access and permissions.' : ''}`);
-    return response.json();
+  let forceRefresh = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    init.signal?.throwIfAborted();
+    const retryAt = cooldowns.get(email) || 0;
+    if (retryAt > Date.now()) throw new ServiceError('rate_limited', `Gmail is limiting ${email}. Retry in ${Math.ceil((retryAt - Date.now()) / 1000)} seconds.`, retryAt);
+    const token = await abortable(accessToken(email, forceRefresh), init.signal);
+    let response: Response;
+    try {
+      response = await fetch(`https://www.googleapis.com/gmail/v1/users/me/${path}`, {
+        ...init, headers: { ...init.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+      });
+    } catch {
+      init.signal?.throwIfAborted();
+      if (attempt < 2) { await delay(1000 * 2 ** attempt, init.signal); continue; }
+      throw new ServiceError('network', 'Cannot reach Gmail. Check your internet connection and search again.');
+    }
+    if (response.status === 401) {
+      if (!forceRefresh && attempt < 2) { forceRefresh = true; continue; }
+      await updateAccounts(accounts => accounts.map(a => a.email === email && a.accessToken === token ? { ...a, needsReauth: true, accessToken: '', expiresAt: 0 } : a));
+      throw new ReauthError(`Reconnect ${email} in the Autofill OS popup.`);
+    }
+    if (response.ok) return response.json();
+    const details = await response.json().catch(() => ({}));
+    const reasons: string[] = details.error?.errors?.map((e: { reason: string }) => e.reason) || [];
+    if (response.status === 429 || (response.status === 403 && reasons.some(r => /rateLimit|quota/i.test(r)))) {
+      const until = retryAfter(response.headers.get('Retry-After'));
+      cooldowns.set(email, until);
+      throw new ServiceError('rate_limited', `Gmail is limiting ${email}. Retry in ${Math.ceil((until - Date.now()) / 1000)} seconds.`, until);
+    }
+    if (response.status === 403) throw new ServiceError('permission', `Gmail access denied for ${email}. Enable Gmail API in Google Cloud and reconnect with Gmail permission.`);
+    if (response.status >= 500 && attempt < 2) { await delay(1000 * 2 ** attempt, init.signal); continue; }
+    throw new ServiceError('gmail_unavailable', `Gmail request failed (${response.status}). Search again shortly.`);
   }
-  throw new ReauthError(`Reconnect ${email} in Autofill OS.`);
+  throw new ServiceError('gmail_unavailable', 'Gmail is temporarily unavailable. Search again shortly.');
 }
