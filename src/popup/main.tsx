@@ -7,6 +7,14 @@ function App() {
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
+  const [serverStatus, setServerStatus] = useState('');
+  const [checkingServer, setCheckingServer] = useState(false);
+  async function checkServer() {
+    setCheckingServer(true); setServerStatus(''); setError('');
+    try { setServerStatus(await request<string>({ type: 'CHECK_CONNECTION_SERVER' })); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Connection check failed.'); }
+    finally { setCheckingServer(false); }
+  }
   async function refresh() { setAccounts(await request<AccountSummary[]>({ type: 'GET_ACCOUNTS' })); }
   useEffect(() => {
     void refresh().catch(e => setError(e.message)).finally(() => setBusy(false));
@@ -40,6 +48,8 @@ function App() {
     {!accounts.length && <p className="mb-4 rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">Connect Gmail to find verification codes when you focus a code field.</p>}
     <button disabled={busy || accounts.length >= MAX_ACCOUNTS} onClick={() => void act('CONNECT_ACCOUNT')} className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? 'Please wait…' : accounts.length >= MAX_ACCOUNTS ? 'All account slots connected' : '+ Connect Gmail account'}</button>
     <button onClick={() => void chooseField()} className="mt-3 w-full rounded-xl border border-indigo-600 px-4 py-3 text-sm font-semibold text-indigo-700">Choose a code field on this page</button>
+    <button disabled={checkingServer} onClick={() => void checkServer()} className="mt-3 text-xs font-semibold text-indigo-700 disabled:opacity-50">{checkingServer ? 'Checking connection server…' : 'Check account connection server'}</button>
+    {serverStatus && <p role="status" className="mt-2 text-xs text-slate-600">{serverStatus}</p>}
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-700">{error}</p>}
     <div className="mt-6 border-t border-slate-200 pt-4 text-xs leading-relaxed text-slate-500"><p>Focus a verification field to search unread mail from the last two minutes. Choose a code to paste it and mark its email as read.</p><p className="mt-2">Tokens stay in this browser profile. Disconnect removes local access; revoke Google permissions from your Google account to remove the grant.</p></div>
   </main>;

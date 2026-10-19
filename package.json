@@ -11,7 +11,8 @@
     "oauth:server": "node --env-file=server/.env server/index.mjs",
     "test:page": "node scripts/test-page.mjs",
     "test:extension": "npm run build && node scripts/check-content.mjs",
-    "test:browser": "npm run build && node scripts/check-browser.mjs"
+    "test:browser": "npm run build && node scripts/check-browser.mjs",
+    "test:broker": "node scripts/check-broker.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

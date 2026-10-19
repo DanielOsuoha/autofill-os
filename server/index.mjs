@@ -13,8 +13,9 @@ const server = createServer(async (req, res) => {
   const respond = (status, body) => { res.writeHead(status); res.end(JSON.stringify(body)); };
   if (req.headers.origin !== origin) return respond(403, { error: 'forbidden_origin' });
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.url === '/health' && req.method === 'GET') return respond(200, { ok: true });
   if (req.url !== '/token') return respond(404, { error: 'not_found' });
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   if (req.method !== 'POST' || !req.headers['content-type']?.startsWith('application/json')) return respond(400, { error: 'invalid_request' });
@@ -45,4 +46,7 @@ const server = createServer(async (req, res) => {
 });
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
-server.listen(Number(PORT), '127.0.0.1', () => console.log(`OAuth broker listening on localhost:${PORT}`));
+server.listen(Number(PORT), '127.0.0.1', () => console.log(`OAuth broker listening on localhost:${server.address().port}`));
+const shutdown = () => server.close(() => process.exit(0));
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

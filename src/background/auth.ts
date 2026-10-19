@@ -5,6 +5,14 @@ import type { Account } from '../shared/types';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const TOKEN_ENDPOINT = import.meta.env.VITE_OAUTH_TOKEN_ENDPOINT;
 const SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
+export async function checkBroker() {
+  if (!TOKEN_ENDPOINT) throw new Error('Configure the OAuth server address and rebuild Autofill OS.');
+  try {
+    const response = await fetch(new URL('/health', TOKEN_ENDPOINT), { signal: AbortSignal.timeout(5000), cache: 'no-store' });
+    if (!response.ok || (await response.json()).ok !== true) throw new Error('unhealthy');
+  } catch { throw new Error('The account connection server is unavailable. Check its connection and try again.'); }
+  return 'Account connection server is reachable. Google authorization is checked when connecting or refreshing an account.';
+}
 interface Tokens { access_token: string; refresh_token?: string; expires_in: number; scope?: string }
 export class ReauthError extends ServiceError { constructor(message: string) { super('reauth', message); } }
 function randomString() {

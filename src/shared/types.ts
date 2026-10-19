@@ -8,6 +8,7 @@ export type PollStatus = 'polling' | 'offline' | 'found' | 'timeout' | 'error';
 export interface PollUpdate { type: 'OTP_STATUS'; requestId: string; status: PollStatus; message?: string; candidate?: Candidate; candidates?: Candidate[]; warning?: string; expiresAt?: number }
 export type Request =
   | { type: 'GET_ACCOUNTS' }
+  | { type: 'CHECK_CONNECTION_SERVER' }
   | { type: 'CHOOSE_CODE_FIELD' }
   | { type: 'CONNECT_ACCOUNT'; email?: string }
   | { type: 'DISCONNECT_ACCOUNT'; email: string }

@@ -62,3 +62,17 @@ it('reports an unreachable broker clearly', async () => {
   const { accessToken } = await import('../src/background/auth');
   await expect(accessToken(accounts[0].email)).rejects.toThrow('Cannot reach the OAuth server');
 });
+it('checks broker health without sending account credentials', async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+  vi.stubGlobal('fetch', fetcher);
+  const { checkBroker } = await import('../src/background/auth');
+  await expect(checkBroker()).resolves.toContain('reachable');
+  expect(String(fetcher.mock.calls[0][0])).toBe('https://broker.test/health');
+  expect(fetcher.mock.calls[0][1]).not.toHaveProperty('body');
+  expect(fetcher.mock.calls[0][1]).not.toHaveProperty('headers');
+});
+it('does not treat an unrelated successful web page as a healthy broker', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>proxy error</html>')));
+  const { checkBroker } = await import('../src/background/auth');
+  await expect(checkBroker()).rejects.toThrow('unavailable');
+});
