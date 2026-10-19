@@ -6,11 +6,11 @@ import styles from '../shared/styles.css?inline';
 let host: HTMLDivElement | undefined;
 let root: Root | undefined;
 let current: Target | undefined;
-let dismissed: HTMLInputElement | undefined;
+let dismissed: HTMLInputElement[] | undefined;
 let inserting = false;
 let resizeObserver: ResizeObserver | undefined;
 function close(dismiss = false) {
-  dismissed = dismiss ? current?.anchor : undefined;
+  dismissed = dismiss ? current?.inputs : undefined;
   resizeObserver?.disconnect(); resizeObserver = undefined;
   root?.unmount(); host?.remove(); root = undefined; host = undefined; current = undefined;
 }
@@ -24,7 +24,7 @@ function position() {
 }
 function show(target: Target) {
   if (inserting || (current && target.inputs.length === current.inputs.length && target.inputs.every((input, i) => input === current!.inputs[i]))) return;
-  if (dismissed === target.anchor) return;
+  if (dismissed?.includes(target.anchor)) return;
   close(); dismissed = undefined; current = target;
   host = document.createElement('div'); host.id = 'autofill-os-widget';
   host.style.cssText = 'all: initial; position: fixed; z-index: 2147483647; display: block;';

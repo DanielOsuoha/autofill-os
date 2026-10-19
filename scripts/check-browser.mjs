@@ -34,6 +34,7 @@ try {
     globalThis.marked = 0;
     globalThis.fetch = async (url, init) => {
       const path = new URL(url).pathname;
+      if (path === '/health') return Response.json({ ok: true });
       if (path.endsWith('/modify')) { globalThis.marked++; return Response.json({}); }
       if (path.endsWith('/messages')) return Response.json({ messages: [{ id: 'fixture-message' }] });
       if (path.endsWith('/messages/fixture-message')) return Response.json({ id: 'fixture-message', internalDate: String(Date.now()), payload: {
@@ -87,6 +88,39 @@ try {
   await until(async () => await page.locator('#autofill-os-widget').count() === 0, 'removed input dismisses stale helper');
   assert.deepEqual(errors, []);
   console.log('PASS: manual field selection, page reload recovery, removed-field cleanup; no page errors.');
+  const browserCdp = await context.browser().newBrowserCDPSession();
+  await worker.evaluate(() => chrome.action.openPopup());
+  let popupTarget;
+  await until(async () => {
+    const { targetInfos } = await browserCdp.send('Target.getTargets');
+    popupTarget = targetInfos.find(target => target.url.endsWith('/src/popup/index.html'));
+    return Boolean(popupTarget);
+  }, 'extension action popup');
+  const { sessionId } = await browserCdp.send('Target.attachToTarget', { targetId: popupTarget.targetId, flatten: false });
+  let commandId = 0;
+  function popupEvaluate(expression) {
+    const id = ++commandId;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { browserCdp.off('Target.receivedMessageFromTarget', receive); reject(new Error('Popup evaluation timeout')); }, 5000);
+      function receive(event) {
+        const reply = JSON.parse(event.message);
+        if (event.sessionId !== sessionId || reply.id !== id) return;
+        clearTimeout(timer); browserCdp.off('Target.receivedMessageFromTarget', receive);
+        if (reply.error || reply.result?.exceptionDetails) reject(new Error('Popup evaluation failed'));
+        else resolve(reply.result?.result?.value);
+      }
+      browserCdp.on('Target.receivedMessageFromTarget', receive);
+      void browserCdp.send('Target.sendMessageToTarget', { sessionId, message: JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, returnByValue: true } }) }).catch(reject);
+    });
+  }
+  await until(() => popupEvaluate(`Boolean([...document.querySelectorAll('button')].find(b => b.textContent === 'Check account connection server'))`), 'popup loaded');
+  await popupEvaluate(`[...document.querySelectorAll('button')].find(b => b.textContent === 'Check account connection server').click()`);
+  await until(async () => {
+    const error = await popupEvaluate(`document.querySelector('[role="alert"]')?.textContent`);
+    if (error) throw new Error(`Popup health check: ${error}`);
+    return await popupEvaluate(`Boolean(document.querySelector('[role="status"]')?.textContent.includes('reachable'))`);
+  }, 'popup broker health check');
+  console.log('PASS: popup health request reaches the background handler and displays its result.');
 } finally {
   await context?.close();
   await new Promise(resolve => server.close(resolve));
