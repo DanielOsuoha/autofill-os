@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { Candidate, PollUpdate } from '../shared/types';
 import { request } from '../shared/types';
 import type { Target } from './detector';
-import { insertCode } from './inject';
+import { insertCode, verifyInsertion } from './inject';
 export function Widget({ target, onClose }: { target: Target; onClose: () => void }) {
   const [minutes, setMinutes] = useState<SearchMinutes>(2);
   const [attempt, setAttempt] = useState(0);
@@ -55,7 +55,13 @@ export function Widget({ target, onClose }: { target: Target; onClose: () => voi
     if (pasted && (pasted.email !== candidate.email || pasted.messageId !== candidate.messageId)) return;
     setBusy(true); setError('');
     try {
-      if (!pasted) { insertCode(target, candidate.code); setPasted(candidate); }
+      if (!pasted) {
+        insertCode(target, candidate.code);
+        // Give controlled inputs a rendering turn to accept or reject the change.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        verifyInsertion(target, candidate.code);
+        setPasted(candidate);
+      }
       await request({ type: 'MARK_EMAIL_READ', requestId, email: candidate.email, messageId: candidate.messageId });
       onClose();
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not paste code.'); }

@@ -1,7 +1,7 @@
 import { manualSelection } from './manual';
 import { createRoot, type Root } from 'react-dom/client';
 import { Widget } from './Widget';
-import { eligible, observeTargets, type Target } from './detector';
+import { eligible, focusedElement, observeTargets, type Target } from './detector';
 import styles from '../shared/styles.css?inline';
 let host: HTMLDivElement | undefined;
 let root: Root | undefined;
@@ -41,7 +41,7 @@ function show(target: Target) {
 }
 observeTargets(show, () => {
   // A manually selected field may deliberately have no OTP metadata.
-  const focused = document.activeElement;
+  const focused = focusedElement();
   if (current?.inputs.includes(focused as HTMLInputElement) && focused instanceof HTMLInputElement && eligible(focused)) return;
   if (!inserting) { close(); dismissed = undefined; }
 });

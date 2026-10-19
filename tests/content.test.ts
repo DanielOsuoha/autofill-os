@@ -1,13 +1,43 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { detect } from '../src/content/detector';
-import { insertCode } from '../src/content/inject';
+import { detect, focusedElement, observeTargets } from '../src/content/detector';
+import { insertCode, verifyInsertion } from '../src/content/inject';
 beforeEach(() => {
   document.body.innerHTML = '';
   vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList);
 });
 function input(attrs = '') { document.body.innerHTML = `<input ${attrs}>`; return document.querySelector('input')!; }
 describe('field detection and insertion', () => {
+  it('recognizes accessible labels in open shadow roots', () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<span id="label">Verification code</span><input aria-labelledby="label">';
+    const field = shadow.querySelector('input')!; field.focus();
+    expect(focusedElement()).toBe(field);
+    expect(detect(field)?.anchor).toBe(field);
+  });
+  it('dismisses a target removed by a page rerender', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(callback, 0));
+    const field = input('autocomplete="one-time-code"'); field.focus();
+    const leave = vi.fn(); const stop = observeTargets(vi.fn(), leave);
+    field.remove();
+    await vi.waitFor(() => expect(leave).toHaveBeenCalled());
+    stop(); vi.unstubAllGlobals();
+  });
+  it('stops when a framework replaces a subsequent split input', () => {
+    document.body.innerHTML = `<div>${'<input maxlength="1">'.repeat(4)}</div>`;
+    const fields = [...document.querySelectorAll('input')];
+    fields[0].addEventListener('input', () => fields[1].replaceWith(document.createElement('input')));
+    expect(() => insertCode({ inputs: fields, anchor: fields[0] }, '1234')).toThrow('changed during insertion');
+    expect(fields[2].value).toBe('');
+  });
+  it('does not confirm insertion when the page rejects a value', () => {
+    const field = input('autocomplete="one-time-code"');
+    field.addEventListener('input', () => { field.value = ''; });
+    const target = { inputs: [field], anchor: field };
+    insertCode(target, '123456');
+    expect(() => verifyInsertion(target, '123456')).toThrow('left unread');
+  });
   it('recognizes autocomplete and excludes disabled or unrelated fields', () => {
     expect(detect(input('autocomplete="one-time-code"'))).not.toBeNull();
     expect(detect(input('name="verificationCode" disabled'))).toBeNull();
