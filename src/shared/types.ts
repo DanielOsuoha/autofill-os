@@ -14,6 +14,9 @@ export type Request =
   | { type: 'MARK_EMAIL_READ'; requestId: string; email: string; messageId: string };
 export type Reply<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 export async function request<T>(message: Request): Promise<T> {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.id || !chrome.runtime?.sendMessage) {
+    throw new Error('Autofill OS was reloaded. Refresh this page to reconnect.');
+  }
   const reply: Reply<T> = await chrome.runtime.sendMessage(message);
   if (!reply?.ok) throw new Error(reply?.error || 'Extension unavailable. Reload this page.');
   return reply.data;

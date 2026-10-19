@@ -8,8 +8,8 @@ let current: Target | undefined;
 let dismissed: HTMLInputElement | undefined;
 let inserting = false;
 let resizeObserver: ResizeObserver | undefined;
-function close() {
-  dismissed = current?.anchor;
+function close(dismiss = false) {
+  dismissed = dismiss ? current?.anchor : undefined;
   resizeObserver?.disconnect(); resizeObserver = undefined;
   root?.unmount(); host?.remove(); root = undefined; host = undefined; current = undefined;
 }
@@ -34,12 +34,12 @@ function show(target: Target) {
   host.addEventListener('pointerdown', event => event.preventDefault());
   host.addEventListener('click', () => { inserting = true; queueMicrotask(() => { inserting = false; }); }, true);
   document.documentElement.append(host);
-  root = createRoot(mount); root.render(<Widget target={target} onClose={close} />);
+  root = createRoot(mount); root.render(<Widget target={target} onClose={() => close(true)} />);
   position();
   resizeObserver = new ResizeObserver(position); resizeObserver.observe(host);
 }
 observeTargets(show, () => { if (!inserting) { dismissed = undefined; close(); dismissed = undefined; } });
 window.addEventListener('scroll', position, true);
 window.addEventListener('resize', position);
-window.addEventListener('pagehide', close);
+window.addEventListener('pagehide', () => close());
 document.addEventListener('visibilitychange', () => { if (document.hidden) close(); });

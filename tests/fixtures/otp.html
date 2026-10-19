@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><meta charset="UTF-8"><title>Autofill OS verification test</title>
+<style>body{font:16px system-ui;max-width:620px;margin:60px auto;padding:24px;color:#172033}input{padding:12px;font:24px monospace;border:1px solid #999;border-radius:8px}fieldset{margin-top:220px;padding:20px}.split input{width:22px}output{display:block;margin-top:20px}</style>
+<h1>Autofill OS verification test</h1>
+<p>Click the field below. The extension's helper should appear even if no email code is available.</p>
+<p>For a Gmail test, send a new email to your connected account with the text “Your verification code is 123456”. Leave it unread, then focus a field here within two minutes.</p>
+<label for="otp">Verification code</label><br><input id="otp" autocomplete="one-time-code" maxlength="8">
+<output id="events">No input events received yet.</output>
+<fieldset class="split"><legend>Six separate verification boxes</legend>
+<input maxlength="1" aria-label="Digit 1"><input maxlength="1" aria-label="Digit 2"><input maxlength="1" aria-label="Digit 3"><input maxlength="1" aria-label="Digit 4"><input maxlength="1" aria-label="Digit 5"><input maxlength="1" aria-label="Digit 6">
+</fieldset>
+<script>let count=0;document.addEventListener('input',()=>{document.querySelector('output').textContent=`Input events received: ${++count}`});</script>
+</html>

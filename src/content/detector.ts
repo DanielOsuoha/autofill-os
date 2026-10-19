@@ -40,8 +40,16 @@ export function observeTargets(onTarget: (target: Target) => void, onLeave: () =
     requestAnimationFrame(() => { queued = false; if (document.activeElement instanceof HTMLInputElement) inspect(); });
   });
   document.addEventListener('focusin', focus);
+  const resume = () => { if (!document.hidden) inspect(); };
+  window.addEventListener('pageshow', resume);
+  window.addEventListener('focus', resume);
+  document.addEventListener('visibilitychange', resume);
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true,
     attributeFilter: ['autocomplete', 'name', 'id', 'placeholder', 'maxlength', 'disabled', 'readonly', 'aria-label'] });
   inspect();
-  return () => { observer.disconnect(); document.removeEventListener('focusin', focus); };
+  return () => {
+    observer.disconnect(); document.removeEventListener('focusin', focus);
+    window.removeEventListener('pageshow', resume); window.removeEventListener('focus', resume);
+    document.removeEventListener('visibilitychange', resume);
+  };
 }

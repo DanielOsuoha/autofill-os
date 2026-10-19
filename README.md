@@ -12,7 +12,7 @@ cp .env.example .env
 npm run build
 ```
 
-Load `dist/` with **chrome://extensions → Developer mode → Load unpacked**. The initial build works without credentials, but Gmail connection requires the setup below. Run `npm run dev` for CRXJS development; reload the extension and target tabs after manifest changes. For testing an installable artifact, use `npm run build` and reload `dist/`.
+Load `dist/` with **chrome://extensions → Developer mode → Load unpacked**. The initial build works without credentials, but Gmail connection requires the setup below. Run `npm run dev` for CRXJS development (it writes to `dist-dev/`, which must be loaded separately and has a different unpacked ID); reload the extension and target tabs after manifest changes. For testing an installable artifact, use `npm run build` and reload `dist/`.
 
 ## Google OAuth configuration
 
@@ -64,3 +64,11 @@ Manual acceptance checks:
 5. Go offline during polling; restore connectivity before 30 seconds, then test staying offline through the deadline. Retry afterward.
 6. Revoke Google authorization and force an access-token refresh (set the stored account's `expiresAt` to `0` in the trusted worker console). Confirm a reconnect prompt and successful recovery.
 7. Disconnect one account, navigate/switch tabs during polling, and close/reopen the popup during consent. Confirm no credentials appear in page messages and no stale poll overwrites a new search.
+
+## Troubleshoot a missing field helper
+
+`npm run dev` writes only to `dist-dev/`; keep the Gmail-configured extension loaded from `dist/`. After rebuilding, reload that extension in Chrome **and refresh the verification webpage** to replace old content-script contexts.
+
+Run `npm run test:page` and open `http://127.0.0.1:8788`. Focus the verification field: the helper should appear even with no new email. To test polling, send a fresh unread message to a connected account containing `Your verification code is 123456`, then focus the field within two minutes. This fixture sends no form data.
+
+`npm run test:extension` builds and executes the actual content bundle in a simulated DOM, checking widget mounting, poll messages, code insertion, mark-read and a missing/invalidated Chrome runtime. It does not replace live Chrome/Gmail testing.

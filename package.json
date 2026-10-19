@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "oauth:server": "node --env-file=server/.env server/index.mjs"
+    "oauth:server": "node --env-file=server/.env server/index.mjs",
+    "test:page": "node scripts/test-page.mjs",
+    "test:extension": "npm run build && node scripts/check-content.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

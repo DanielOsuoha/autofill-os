@@ -19,6 +19,6 @@ export function manifest(env: Record<string, string>) {
     ...(env.VITE_EXTENSION_KEY ? { key: env.VITE_EXTENSION_KEY } : {}),
     background: { service_worker: 'src/background/index.ts', type: 'module' },
     action: { default_popup: 'src/popup/index.html', default_title: 'Autofill OS' },
-    content_scripts: [{ matches: ['https://*/*', 'http://*/*'], js: ['src/content/index.tsx'], run_at: 'document_idle' }],
+    content_scripts: [{ matches: ['https://*/*', 'http://*/*'], js: ['src/content/index.tsx'], world: 'ISOLATED', run_at: 'document_idle' }],
   });
 }

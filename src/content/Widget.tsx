@@ -13,16 +13,30 @@ export function Widget({ target, onClose }: { target: Target; onClose: () => voi
   useEffect(() => {
     const id = crypto.randomUUID(); let live = true;
     setRequestId(id); setUpdate(undefined); setError(''); setPasted(false);
+    const runtime = typeof chrome === 'undefined' ? undefined : chrome.runtime;
+    if (!runtime?.id || !runtime.onMessage) {
+      setError('Autofill OS was reloaded or is unavailable. Refresh this page to reconnect.');
+      setUpdate({ type: 'OTP_STATUS', requestId: id, status: 'error', message: 'Refresh this page to activate Autofill OS.' });
+      return;
+    }
     const listener = (message: PollUpdate) => {
       if (message.type === 'OTP_STATUS' && message.requestId === id) setUpdate(message);
     };
-    chrome.runtime.onMessage.addListener(listener);
+    try {
+      runtime.onMessage.addListener(listener);
+    } catch {
+      setError('Autofill OS was reloaded. Refresh this page to reconnect.');
+      setUpdate({ type: 'OTP_STATUS', requestId: id, status: 'error', message: 'Extension connection unavailable.' });
+      return;
+    }
     void request({ type: 'START_OTP_POLL', requestId: id, domain: location.hostname, title: document.title })
       .catch(e => { if (live) setError(e.message); });
     // Covers a worker restart, tab switch, or a disconnected message channel.
     const watchdog = setTimeout(() => { if (live) setUpdate(current => current?.status === 'found' ? current : { type: 'OTP_STATUS', requestId: id, status: 'timeout', message: 'Search ended. Try again.' }); }, 32_000);
     return () => {
-      live = false; clearTimeout(watchdog); chrome.runtime.onMessage.removeListener(listener);
+      live = false; clearTimeout(watchdog);
+      // Chrome can invalidate the context while the helper is still mounted.
+      try { runtime.onMessage.removeListener(listener); } catch { /* Page refresh restores the context. */ }
       void request({ type: 'STOP_OTP_POLL', requestId: id }).catch(() => {});
     };
   }, [attempt]);

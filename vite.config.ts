@@ -27,5 +27,6 @@ export default defineConfig(({ mode, command }) => ({
       },
     },
   ],
-  build: { sourcemap: false },
+  // Keep a running dev server from replacing the installable Chrome build.
+  build: { outDir: command === 'serve' ? 'dist-dev' : 'dist', sourcemap: false },
 }));
