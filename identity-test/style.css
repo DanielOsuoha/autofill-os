@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 24px; }
+main { max-width: 900px; margin: auto; }
+section { border: 1px solid #888; border-radius: 12px; padding: 20px; margin: 20px 0; }
+button, input { font: inherit; padding: 10px; margin: 5px; }
+input { width: min(350px, 75%); }
+button { cursor: pointer; }
+button:disabled { cursor: wait; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+#status { font-weight: bold; }

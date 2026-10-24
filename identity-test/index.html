@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Autofill OS Identity Test</title><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<h1>Chrome account experiment</h1>
+<p>This separate test uses Google directly. No localhost server is required. Tokens and message contents are never displayed or saved by this page.</p>
+<p id="setup"></p>
+<p>Use one diagnostic tab at a time. Enter each account’s primary Gmail address before connecting.</p>
+<section><h2>Account A</h2><label>Expected email <input id="email-A" type="email" autocomplete="off"></label><p id="saved-A">Not connected</p><button data-action="connect" data-slot="A">Connect A</button><button data-action="check" data-slot="A">Check A silently</button><button data-action="fresh" data-slot="A">Evict A token and retry</button><button data-action="forget" data-slot="A">Disconnect A locally</button></section>
+<section><h2>Account B</h2><label>Expected email <input id="email-B" type="email" autocomplete="off"></label><p id="saved-B">Not connected</p><button data-action="connect" data-slot="B">Connect B</button><button data-action="check" data-slot="B">Check B silently</button><button data-action="fresh" data-slot="B">Evict B token and retry</button><button data-action="forget" data-slot="B">Disconnect B locally</button></section>
+<section><h2>If Chrome keeps choosing the same account</h2><p>Resetting clears this test extension’s token cache and account preferences. Saved A/B identities remain so you can test whether both can be reacquired. It does not guarantee an account chooser will appear.</p><button data-action="reset">Reset test authentication state</button></section>
+<p>Cache eviction is not expiration or revocation. Also test after natural expiration and a full Chrome restart. To test revocation, remove this test app from account A’s Google account connections, then check A and B here.</p>
+<p id="status" role="status" aria-live="polite">Ready</p>
+<h2>Results</h2><p>Results include email addresses and account IDs. Review before sharing.</p><button data-action="export">Download results</button><pre id="results"></pre>
+</main><script type="module" src="app.js"></script></body></html>
