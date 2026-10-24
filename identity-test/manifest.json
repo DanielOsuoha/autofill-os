@@ -19,7 +19,7 @@
     "service_worker": "worker.js"
   },
   "oauth2": {
-    "client_id": "dmaojiilodmkhpdeomamjdalhgmoodhm",
+    "client_id": "624270408645-jie4nfo3oq1hl7ll8a52g5bg7f6nqq10.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/userinfo.profile",
       "https://www.googleapis.com/auth/userinfo.email",
