@@ -19,7 +19,7 @@
     "service_worker": "worker.js"
   },
   "oauth2": {
-    "client_id": "REPLACE_ME.apps.googleusercontent.com",
+    "client_id": "dmaojiilodmkhpdeomamjdalhgmoodhm",
     "scopes": [
       "https://www.googleapis.com/auth/userinfo.profile",
       "https://www.googleapis.com/auth/userinfo.email",
