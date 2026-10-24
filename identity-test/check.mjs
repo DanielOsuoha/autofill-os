@@ -22,5 +22,17 @@ try {
   await w.test.act('forget','A');await w.test.act('check','B');
   assert.equal(saved.accounts.A,undefined);assert.equal(saved.accounts.B.id,'222');
   await assert.rejects(w.test.verify('B',{id:'111',email:'b@example.com'}),/MISMATCH/);
+  const workingFetch = w.fetch;
+  w.fetch = async (url, options) => url.includes('/profile')
+    ? {ok:false,status:403,json:async()=>({error:{status:'PERMISSION_DENIED',message:'private message',details:[{reason:'ACCESS_TOKEN_SCOPE_INSUFFICIENT',metadata:{token:'private token'}}]}})}
+    : workingFetch(url, options);
+  await assert.rejects(w.test.verify('B',ids.B), error => {
+    assert.match(error.message, /Gmail profile: HTTP 403/);
+    assert.match(error.message, /ACCESS_TOKEN_SCOPE_INSUFFICIENT/);
+    assert.doesNotMatch(error.message, /private/);
+    return true;
+  });
+  w.fetch = async () => ({ok:false,status:403,json:async()=>{throw Error('not JSON')}});
+  await assert.rejects(w.test.verify('B',ids.B), /Google account identity: HTTP 403 \(reason unavailable\)/);
   console.log('PASS: wrong email and ID rejected; independent A/B selection; silent reacquisition; empty inbox; local disconnect preserves B.');
 } finally { dom.window.close(); }

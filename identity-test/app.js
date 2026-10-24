@@ -5,12 +5,22 @@ let results = [];
 const manifest = chrome.runtime.getManifest();
 $('setup').textContent = `Extension ID: ${chrome.runtime.id}. ${manifest.oauth2.client_id.startsWith('REPLACE_ME') ? 'Set oauth2.client_id in manifest.json, reload the extension, then reopen this page.' : 'Client ID configured.'}`;
 
-async function api(url, token) {
+async function api(url, token, stage) {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store', signal: AbortSignal.timeout(20000),
   });
-  if (!response.ok) throw new Error(`Google API returned HTTP ${response.status}. Check consent, scopes and Gmail API enablement.`);
+  if (!response.ok) {
+    let error;
+    try { error = (await response.json()).error; } catch { /* Non-JSON error response. */ }
+    // Only structured error codes: never log response messages, metadata or bodies.
+    const codes = [error?.status,
+      ...(Array.isArray(error?.errors) ? error.errors.map(item => item?.reason) : []),
+      ...(Array.isArray(error?.details) ? error.details.map(item => item?.reason) : [])]
+      .filter(code => typeof code === 'string' && /^[A-Za-z][A-Za-z_]{0,79}$/.test(code));
+    const reasons = [...new Set(codes)].join(', ') || 'reason unavailable';
+    throw new Error(`${stage}: HTTP ${response.status} (${reasons}).`);
+  }
   return response.json();
 }
 async function getToken(id, interactive = false) {
@@ -20,13 +30,13 @@ async function getToken(id, interactive = false) {
   return result.token;
 }
 async function verify(token, expected) {
-  const user = await api('https://www.googleapis.com/oauth2/v2/userinfo', token);
-  const profile = await api('https://gmail.googleapis.com/gmail/v1/users/me/profile', token);
+  const user = await api('https://www.googleapis.com/oauth2/v2/userinfo', token, 'Google account identity');
+  const profile = await api('https://gmail.googleapis.com/gmail/v1/users/me/profile', token, 'Gmail profile');
   if (!user.id || !user.email || user.verified_email !== true || !profile.emailAddress) throw new Error('Google did not return a verified account identity.');
   if (normalize(user.email) !== normalize(expected.email) || normalize(profile.emailAddress) !== normalize(expected.email) || (expected.id && user.id !== expected.id)) {
     throw new Error('ACCOUNT MISMATCH: token does not belong to the intended account. No account was saved.');
   }
-  const inbox = await api('https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&maxResults=1', token);
+  const inbox = await api('https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&maxResults=1', token, 'Gmail inbox');
   return { id: user.id, email: user.email, inboxAccessible: true, inboxHasMessages: Boolean(inbox.messages?.length) };
 }
 function render() {
