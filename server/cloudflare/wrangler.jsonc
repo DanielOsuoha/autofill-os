@@ -1,0 +1,38 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "autofill-os-oauth",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-24",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false,
+      "head_sampling_rate": 0.1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "ratelimits": [
+    {
+      "name": "IP_LIMITER",
+      "namespace_id": "878701",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    },
+    {
+      "name": "TOTAL_LIMITER",
+      "namespace_id": "878702",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
+  ]
+}

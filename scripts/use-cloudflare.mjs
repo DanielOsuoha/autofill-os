@@ -1,0 +1,14 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
+const endpoint = new URL(process.argv[2] || '');
+if (endpoint.protocol !== 'https:' || !endpoint.hostname.endsWith('.workers.dev') || endpoint.port || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || endpoint.pathname !== '/token') throw Error('Supply the deployed HTTPS workers.dev URL ending in /token.');
+const server = parseEnv(readFileSync('server/.env', 'utf8'));
+const response = await fetch(new URL('/health', endpoint), { headers: { Origin: `chrome-extension://${server.EXTENSION_ID}` }, signal: AbortSignal.timeout(15000) });
+const health = await response.json();
+if (!response.ok || health.ok !== true || health.service !== 'autofill-os-oauth') throw Error('Hosted broker health check failed; local configuration was not changed.');
+const original = readFileSync('.env', 'utf8');
+const line = `VITE_OAUTH_TOKEN_ENDPOINT=${endpoint.href}`;
+const updated = /^VITE_OAUTH_TOKEN_ENDPOINT=.*$/m.test(original) ? original.replace(/^VITE_OAUTH_TOKEN_ENDPOINT=.*$/m, line) : `${original.trimEnd()}\n${line}\n`;
+writeFileSync('.env', updated);
+console.log('Hosted broker verified and extension endpoint updated. Run npm run build, then reload the ORIGINAL Autofill OS extension.');
+console.log(`Its Chrome ID must match ${server.EXTENSION_ID}. Keep the existing loaded dist folder and OAuth redirect URI.`);

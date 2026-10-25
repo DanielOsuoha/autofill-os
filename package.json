@@ -13,7 +13,13 @@
     "test:page": "node scripts/test-page.mjs",
     "test:extension": "npm run build && node scripts/check-content.mjs",
     "test:browser": "npm run build && node scripts/check-browser.mjs",
-    "test:broker": "node scripts/check-broker.mjs"
+    "test:broker": "node scripts/check-broker.mjs",
+    "test:cloudflare": "node scripts/check-cloudflare.mjs",
+    "oauth:cloud:login": "wrangler login",
+    "oauth:cloud:check": "wrangler deploy --dry-run --config server/cloudflare/wrangler.jsonc",
+    "oauth:cloud:deploy": "wrangler deploy --config server/cloudflare/wrangler.jsonc",
+    "oauth:cloud:secrets": "node scripts/cloudflare-secrets.mjs",
+    "oauth:cloud:use": "node scripts/use-cloudflare.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -35,6 +41,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "wrangler": "^4.152.0"
   }
 }

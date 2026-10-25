@@ -60,6 +60,10 @@ npm run test:broker
 
 Automated coverage includes MIME/code parsing, public-suffix domain ranking, pagination/partial failures, field detection, insertion validation, PKCE, refresh failures, rate limits, deadlines, offline recovery and worker-checkpoint recovery. The Chromium suite loads the actual packaged extension in a disposable profile with mocked Gmail responses and real React-controlled single/split inputs; it also covers manual selection, navigation and removed fields. The broker test uses fake credentials and makes no Google requests. Live Google consent, real inbox access and third-party websites still require manual testing.
 
+## Host the connection server online
+
+Cloudflare Workers deployment and migration instructions are in [server/cloudflare/README.md](server/cloudflare/README.md). This keeps the original two-account OAuth flow and removes the need to run localhost after migration.
+
 ## Keep the local connection server available
 
 The popup's **Check account connection server** button calls the broker's origin-restricted `/health` endpoint. A successful result means the broker is reachable; it does not prove that Google credentials or account grants are valid. Restart the broker after updating its code.

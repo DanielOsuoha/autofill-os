@@ -8,3 +8,6 @@ server/.env
 coverage/
 *.local
 .DS_Store
+.wrangler/
+.dev.vars
+.dev.vars.*
