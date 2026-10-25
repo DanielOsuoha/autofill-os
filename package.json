@@ -19,7 +19,8 @@
     "oauth:cloud:check": "wrangler deploy --dry-run --config server/cloudflare/wrangler.jsonc",
     "oauth:cloud:deploy": "wrangler deploy --config server/cloudflare/wrangler.jsonc",
     "oauth:cloud:secrets": "node scripts/cloudflare-secrets.mjs",
-    "oauth:cloud:use": "node scripts/use-cloudflare.mjs"
+    "oauth:cloud:use": "node scripts/use-cloudflare.mjs",
+    "test:cloudflare:runtime": "node scripts/check-cloudflare-runtime.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

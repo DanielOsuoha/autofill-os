@@ -85,8 +85,10 @@ export function createBroker(upstreamFetch = fetch) {
         params.set('grant_type', 'refresh_token'); params.set('refresh_token', body.refresh_token);
       } else return reply(400, { error: 'invalid_request' });
       const upstream = await upstreamFetch(GOOGLE_TOKEN_URL, {
-        method: 'POST', body: params, redirect: 'error', signal: AbortSignal.timeout(10_000),
+        method: 'POST', body: params, redirect: 'manual', signal: AbortSignal.timeout(10_000),
       });
+      // workerd does not support redirect: 'error'. Never follow redirects with credentials.
+      if (upstream.status >= 300 && upstream.status < 400) return reply(502, { error: 'token_exchange_failed' });
       const result = await upstream.json();
       if (!upstream.ok) return reply(upstream.status >= 500 ? 502 : 400, { error: GOOGLE_ERRORS.has(result?.error) ? result.error : 'token_exchange_failed' });
       if (!text(result?.access_token) || !Number.isFinite(result.expires_in) || result.expires_in <= 0) return reply(502, { error: 'invalid_token_response' });

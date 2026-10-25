@@ -32,7 +32,7 @@ assert.deepEqual(tokens,{access_token:'test-access',refresh_token:'test-refresh'
 assert.equal(calls.at(-1).url,'https://oauth2.googleapis.com/token');
 assert.equal(calls.at(-1).params.client_id,'test-client');
 assert.equal(calls.at(-1).params.client_secret,'test-secret');
-assert.equal(calls.at(-1).redirect,'error');
+assert.equal(calls.at(-1).redirect,'manual');
 assert.equal((await broker(request({grant_type:'authorization_code',code:'code',code_verifier:'x'.repeat(43),redirect_uri:`https://${id}.chromiumapp.org/oauth2`}),env)).status,200);
 for (const [upstream, status, expected] of [
   [{error:'invalid_grant',error_description:'private'},400,'invalid_grant'],

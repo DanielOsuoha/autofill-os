@@ -7,7 +7,7 @@ This deploys the original Autofill OS confidential-client OAuth flow. It is sepa
 Use Node 22.12+ and the installed project-local Wrangler. From the repository root:
 
 1. `npm run oauth:cloud:login` — authorize in your browser (if not already logged in).
-2. `npm run test:cloudflare` and `npm run oauth:cloud:check` — tests and packaging dry run.
+2. `npm run test:cloudflare`, `npm run test:cloudflare:runtime`, and `npm run oauth:cloud:check` — security tests, actual workerd runtime regression tests, and packaging dry run.
 3. `npm run oauth:cloud:deploy` — creates `autofill-os-oauth` in the selected Cloudflare account. Before secrets are configured, it returns 503 and exchanges no tokens.
 4. `npm run oauth:cloud:secrets` — reads only GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and EXTENSION_ID from the original ignored `server/.env`, checks that the client matches the original extension's `.env`, and uploads via stdin. Nothing secret is placed in command arguments or source. This updates the live deployment.
 5. Copy the returned workers.dev URL and run `npm run oauth:cloud:use -- https://autofill-os-oauth.YOUR-SUBDOMAIN.workers.dev/token`. It checks the hosted health endpoint with the original extension's Origin before updating the ignored root `.env`.
@@ -27,6 +27,6 @@ Once the hosted build is working, stop the local broker terminal (Ctrl+C). If yo
 - Google client secret is stored as a Cloudflare encrypted secret binding. Tokens are processed in request memory and returned with no-store; no token database is created. Hosting means trusting Cloudflare's runtime and your Cloudflare account with this processing.
 - Secret changes use `npm run oauth:cloud:secrets`. Code redeploys preserve secrets. Never commit `.env`, `.dev.vars`, credentials or Wrangler auth files.
 
-The included Node tests mock Google and rate-limit bindings. Dry run validates packaging. Live health/rejection probes validate deployment, but real Chrome consent and two-account refresh remain manual acceptance tests.
+The Node security tests mock Google and rate-limit bindings. The workerd runtime tests use real runtime bindings with a fake Google upstream and verify authorization-code exchanges, refreshes, error forwarding and redirect rejection. Dry run validates packaging. Live health/rejection probes validate deployment, but real Chrome consent and two-account refresh remain manual acceptance tests.
 
 References: https://developers.cloudflare.com/workers/configuration/secrets/ and https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/.
